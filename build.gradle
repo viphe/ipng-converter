@@ -4,8 +4,8 @@ apply plugin: 'maven'
 version = '1.0'
 group = 'ipng-converter'
 
-sourceCompatibility = 1.6
-targetCompatibility = 1.6
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
 
 repositories {
     mavenCentral()
@@ -39,6 +39,12 @@ uploadArchives {
             snapshots(updatePolicy: 'always')
         }
         pom.project(pomConfiguration)
+    }
+}
+
+task writePom << {
+    pom {
+        project { pomConfiguration }.writeTo("$buildDir/libs/${project.name}-${version}.pom")
     }
 }
 

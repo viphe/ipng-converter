@@ -3,6 +3,7 @@ package com.kylinworks;
 import com.jcraft.jzlib.*;
 
 import java.io.*;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.logging.Level;
@@ -96,6 +97,26 @@ public class IPngConverter {
       convertDataTrunk(ihdrTrunk, outputBuffer, nMaxInflateBuffer);
 
       writePng(targetFile);
+
+    } else {
+      // Likely a standard PNG: just copy
+      byte[] buffer = new byte[1024];
+      int bytesRead;
+      InputStream inputStream = new FileInputStream(pngFile);
+      try {
+        OutputStream outputStream = new FileOutputStream(targetFile);
+        try {
+          while ((bytesRead = inputStream.read(buffer)) >= 0) {
+            outputStream.write(buffer, 0, bytesRead);
+          }
+          outputStream.flush();
+
+        } finally {
+          outputStream.close();
+        }
+      } finally {
+        inputStream.close();
+      }
     }
   }
 
