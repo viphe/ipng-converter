@@ -99,47 +99,77 @@ public class IPngConverter {
     }
   }
 
+  private long inflate(byte[] conversionBuffer, int nMaxInflateBuffer) throws GZIPException {
+    Inflater inflater = new Inflater(-15);
+
+    for (PNGTrunk dataTrunk : trunks) {
+      if (!"IDAT".equalsIgnoreCase(dataTrunk.getName())) continue;
+      inflater.setInput(dataTrunk.getData(), true);
+    }
+
+    inflater.setOutput(conversionBuffer);
+
+    int nResult;
+    try {
+      nResult = inflater.inflate(JZlib.Z_NO_FLUSH);
+      checkResultStatus(nResult);
+    } finally {
+      inflater.inflateEnd();
+    }
+
+    if (inflater.getTotalOut() > nMaxInflateBuffer) {
+      log.fine("PNGCONV_ERR_INFLATED_OVER");
+    }
+
+    return inflater.getTotalOut();
+  }
+
+  private Deflater deflate(byte[] buffer, int length, int nMaxInflateBuffer) throws GZIPException {
+    Deflater deflater = new Deflater();
+    deflater.setInput(buffer, 0, length, false);
+
+    int nMaxDeflateBuffer = nMaxInflateBuffer + 1024;
+    byte[] deBuffer = new byte[nMaxDeflateBuffer];
+    deflater.setOutput(deBuffer);
+
+    deflater.deflateInit(JZlib.Z_BEST_COMPRESSION);
+    int nResult = deflater.deflate(JZlib.Z_FINISH);
+    checkResultStatus(nResult);
+
+    if (deflater.getTotalOut() > nMaxDeflateBuffer) {
+      throw new GZIPException("deflater output buffer was too small");
+    }
+
+    return deflater;
+  }
+
+  private void checkResultStatus(int nResult) throws GZIPException {
+    switch (nResult) {
+      case JZlib.Z_OK:
+      case JZlib.Z_STREAM_END:
+        break;
+
+      case JZlib.Z_NEED_DICT:
+        throw new GZIPException("Z_NEED_DICT - " + nResult);
+      case JZlib.Z_DATA_ERROR:
+        throw new GZIPException("Z_DATA_ERROR - " + nResult);
+      case JZlib.Z_MEM_ERROR:
+        throw new GZIPException("Z_MEM_ERROR - " + nResult);
+      case JZlib.Z_STREAM_ERROR:
+        throw new GZIPException("Z_STREAM_ERROR - " + nResult);
+      case JZlib.Z_BUF_ERROR:
+        throw new GZIPException("Z_BUF_ERROR - " + nResult);
+      default:
+        throw new GZIPException("inflater error: " + nResult);
+    }
+  }
+
   private boolean convertDataTrunk(
     PNGIHDRTrunk ihdrTrunk, byte[] conversionBuffer, int nMaxInflateBuffer)
   throws IOException {
     log.fine("converting colors");
 
-    ByteArrayOutputStream baos = new ByteArrayOutputStream(2048);
-    for (PNGTrunk dataTrunk : trunks) {
-      if (!"IDAT".equalsIgnoreCase(dataTrunk.getName())) continue;
-      baos.write(dataTrunk.getData());
-    }
-    byte[] allData = baos.toByteArray();
-
-    ZStream inflater = new ZStream();
-    inflater.avail_in = allData.length;
-    inflater.next_in_index = 0;
-    inflater.next_in = allData;
-    inflater.next_out_index = 0;
-    inflater.next_out = conversionBuffer;
-    inflater.avail_out = conversionBuffer.length;
-
-    if (inflater.inflateInit(-15) != JZlib.Z_OK) {
-      log.fine("PNGCONV_ERR_ZLIB");
-      return true;
-    }
-
-    int nResult = inflater.inflate(JZlib.Z_NO_FLUSH);
-    switch (nResult) {
-      case JZlib.Z_NEED_DICT:
-        nResult = JZlib.Z_DATA_ERROR;     /* and fall through */
-      case JZlib.Z_DATA_ERROR:
-      case JZlib.Z_MEM_ERROR:
-        inflater.inflateEnd();
-        log.fine("PNGCONV_ERR_ZLIB");
-        return true;
-    }
-
-    nResult = inflater.inflateEnd();
-
-    if (inflater.total_out > nMaxInflateBuffer) {
-      log.fine("PNGCONV_ERR_INFLATED_OVER");
-    }
+    long inflatedSize = inflate(conversionBuffer, nMaxInflateBuffer);
 
     // Switch the color
     int nIndex = 0;
@@ -154,39 +184,22 @@ public class IPngConverter {
       }
     }
 
-    ZStream deflater = new ZStream();
-    int nMaxDeflateBuffer = nMaxInflateBuffer + 1024;
-    byte[] deBuffer = new byte[nMaxDeflateBuffer];
+    Deflater deflater = deflate(conversionBuffer, (int) inflatedSize, nMaxInflateBuffer);
 
-    deflater.avail_in = (int) inflater.total_out;
-    deflater.next_in_index = 0;
-    deflater.next_in = conversionBuffer;
-    deflater.next_out_index = 0;
-    deflater.next_out = deBuffer;
-    deflater.avail_out = deBuffer.length;
-    deflater.deflateInit(9);
-    nResult = deflater.deflate(JZlib.Z_FINISH);
-
-
-    if (deflater.total_out > nMaxDeflateBuffer) {
-      log.fine("PNGCONV_ERR_DEFLATED_OVER");
-    }
-
-    byte[] newDeBuffer = new byte[(int) deflater.total_out];
-    System.arraycopy(deBuffer, 0, newDeBuffer, 0, newDeBuffer.length);
-
+    // Put the result in the first IDAT chunk (the only one to be written out)
     PNGTrunk firstDataTrunk = getTrunk("IDAT");
+
     CRC32 crc32 = new CRC32();
     crc32.update(firstDataTrunk.getName().getBytes());
-    crc32.update(newDeBuffer);
+    crc32.update(deflater.getNextOut(), 0, (int) deflater.getTotalOut());
     long lCRCValue = crc32.getValue();
 
-    firstDataTrunk.m_nData = newDeBuffer;
+    firstDataTrunk.m_nData = deflater.getNextOut();
     firstDataTrunk.m_nCRC[0] = (byte) ((lCRCValue & 0xFF000000) >> 24);
     firstDataTrunk.m_nCRC[1] = (byte) ((lCRCValue & 0xFF0000) >> 16);
     firstDataTrunk.m_nCRC[2] = (byte) ((lCRCValue & 0xFF00) >> 8);
     firstDataTrunk.m_nCRC[3] = (byte) (lCRCValue & 0xFF);
-    firstDataTrunk.m_nSize = newDeBuffer.length;
+    firstDataTrunk.m_nSize = (int) deflater.getTotalOut();
 
     return false;
   }
@@ -198,9 +211,12 @@ public class IPngConverter {
       outStream.write(pngHeader);
       boolean dataWritten = false;
       for (PNGTrunk trunk : trunks) {
+        // Skip Apple specific and misplaced CgBI chunk
         if (trunk.getName().equalsIgnoreCase("CgBI")) {
           continue;
         }
+
+        // Only write the first IDAT chunk as they have all been put together now
         if ("IDAT".equalsIgnoreCase(trunk.getName())) {
           if (dataWritten) {
             continue;
@@ -208,6 +224,7 @@ public class IPngConverter {
             dataWritten = true;
           }
         }
+
         trunk.writeToStream(outStream);
       }
       outStream.flush();

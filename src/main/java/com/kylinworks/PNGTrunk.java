@@ -71,7 +71,7 @@ public class PNGTrunk {
 
     outStream.write(nSize);
     outStream.write(m_szName.getBytes("ASCII"));
-    outStream.write(m_nData);
+    outStream.write(m_nData, 0, m_nSize);
     outStream.write(m_nCRC);
   }
 

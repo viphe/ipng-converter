@@ -1,9 +1,11 @@
 apply plugin: 'java'
-
-sourceCompatibility = 1.6
+apply plugin: 'maven'
 
 version = '1.0'
-group = 'com.kylinworks'
+group = 'ipng-converter'
+
+sourceCompatibility = 1.6
+targetCompatibility = 1.6
 
 repositories {
     mavenCentral()
@@ -13,6 +15,7 @@ dependencies {
     compile 'com.jcraft:jzlib:1.1.2'
 }
 
+
 jar {
     manifest {
         attributes 'Implementation-Title': 'iPNG Converter',
@@ -20,6 +23,50 @@ jar {
             'Built-Date': new Date(),
             'Built-JDK': System.getProperty('java.version'),
             'Built-Gradle': gradle.gradleVersion
+    }
+}
+
+install.repositories.mavenInstaller {
+    pom.project(pomConfiguration)
+}
+
+uploadArchives {
+    repositories.mavenDeployer {
+        name = 'mavenCentralReleaseDeployer'
+        repository(url: 'https://oss.sonatype.org/service/local/staging/deploy/maven2/') {
+            authentication(userName: System.properties['mavenCentralUsername'], password: System.properties['mavenCentralPassword'])
+            releases(updatePolicy: 'always')
+            snapshots(updatePolicy: 'always')
+        }
+        pom.project(pomConfiguration)
+    }
+}
+
+def getPomConfiguration() {
+    return {
+        name 'iPngConverter'
+        packaging 'jar'
+        description 'iPhone CgIB Optimized PNG Converter'
+        url 'https://github.com/viphe/ipng-converter'
+        licenses {
+            license {
+                name 'CC0 1.0 Universal (CC0 1.0) - Public Domain Dedication'
+                url 'http://creativecommons.org/publicdomain/zero/1.0/'
+                distribution 'repo'
+            }
+        }
+        developers {
+            developer {
+                id 'viphe'
+                name 'Philippe Vosges'
+                email 'philippe.vosges@gmail.com'
+            }
+        }
+        scm {
+            connection 'scm:https://github.com/viphe/ipng-converter'
+            developerConnection 'scm:git@github.com:viphe/ipng-converter.git'
+            url 'https://github.com/viphe/ipng-converter'
+        }
     }
 }
 
