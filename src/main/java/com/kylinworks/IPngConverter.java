@@ -234,8 +234,6 @@ public class IPngConverter {
           trunk = PNGTrunk.generateTrunk(input);
           trunks.add(trunk);
 
-          log.fine("read chunk " + trunk.getName());
-
           if (trunk.getName().equalsIgnoreCase("CgBI")) {
             bWithCgBI = true;
           }
