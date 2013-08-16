@@ -1,0 +1,28 @@
+apply plugin: 'java'
+
+sourceCompatibility = 1.6
+
+version = '1.0'
+group = 'com.kylinworks'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile 'com.jcraft:jzlib:1.1.2'
+}
+
+jar {
+    manifest {
+        attributes 'Implementation-Title': 'iPNG Converter',
+            'Implementation-Version': version,
+            'Built-Date': new Date(),
+            'Built-JDK': System.getProperty('java.version'),
+            'Built-Gradle': gradle.gradleVersion
+    }
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '1.7'
+}
