@@ -98,7 +98,7 @@ public class IPngConverter {
 
       writePng(targetFile);
 
-    } else {
+    } else if(!pngFile.equals(targetFile)) {
       // Likely a standard PNG: just copy
       byte[] buffer = new byte[1024];
       int bytesRead;
